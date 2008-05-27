@@ -1,8 +1,9 @@
 <?php
 	class zip {
-		private $stream = null, $dataSize = 0, $fileCount = 0, $ctrlDir = '';
+		private $stream = null, $dataSize = 0, $fileCount = 0, $ctrlDir = '', $finalized = false;
 		
 		function __construct($s = null) { $this->stream = isset($s) ? $s : fopen('php://output', 'wb'); }
+		function __destruct() { $this->finalize(); }
 
 		function addFile($file, $name) { $this->addStream($f = fopen($file, 'rb'), $name, filemtime($file)); fclose($f); }
 		function addStream($s, $name, $time = null) { $data = ''; while (!feof($s)) $data .= fread($s, 10240); $this->addData($data, $name, $time); }
@@ -24,8 +25,10 @@
 		}
 		
 		function finalize() {
+			if ($this->finalized) return;
 			fwrite($this->stream, $this->ctrlDir);
 			fwrite($this->stream, pack('nnVvvVVv', 0x504B, 0x0506, 0, $this->fileCount, $this->fileCount, strlen($this->ctrlDir), $this->dataSize, 0));
+			$this->finalized = true;
 		}
 
 		static function httpStartSend($file) {
