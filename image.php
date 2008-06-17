@@ -8,7 +8,7 @@
 		private static $map = array(self::GIF => 'gif', self::PNG => 'png', self::JPEG => 'jpeg');
 		private static $map_r = array('gif' => self::GIF, 'png' => self::PNG, 'jpeg' => self::JPEG, 'jpg' => self::JPEG);
 	
-		private $i;
+		public $i;
 		public $x, $y;
 		public $w, $h;
 		
