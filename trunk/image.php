@@ -1,4 +1,29 @@
 <?php
+	class Font {
+		public $file, $size, $angle;
+
+		function __construct($file, $size, $angle = 0) {
+			$this->file  = $file;
+			$this->size  = $size;
+			$this->angle = $angle;
+		}
+
+		function getBoxExtended($text) {
+			return imagettfbbox($this->size, $this->angle, $this->file, $text);
+		}
+		
+		function getBox($text) {
+			list(,,$x2,$y2,,,$x1,$y1) = $this->getBoxExtended($text);
+			//echo "($x1,$y1)-($x2,$y2)\n";
+			return array(abs($x2 - $x1), abs($y2 - $y1));
+		}
+		
+		function getBaseLine($text) {
+			$b = $this->getBoxExtended($text);
+			return -$b[7];
+		}
+	}
+
 	class Image {
 		const PNG  = IMAGETYPE_PNG;
 		const JPEG = IMAGETYPE_JPEG;
@@ -50,6 +75,10 @@
 			return ($x < 0 || $y < 0 || $x >= $this->w || $y >= $this->h);
 		}
 		
+		function isSlice() {
+			return ($this->x != 0 || $this->y != 0 || $this->w != imageSX($this->i) || $this->h != imageSY($this->i));
+		}
+		
 		function get($x, $y) {
 			if ($this->checkBounds($x, $y)) return -1;
 			return imageColorAt($i, $x + $this->x, $y + $this->y);
@@ -68,6 +97,20 @@
 			}
 		}
 		
+		
+		function drawText($f, $x, $y, $text, $color = 0xFFFFFF, $anchorX = -1, $anchorY = -1, $baseLine = false) {
+			if ($this->isSlice()) {
+				throw(new Exception("Drawing in slices not implemented"));
+			} else {
+				$b = $f->getBox($text);
+				$rx = $x - ((($anchorX + 1) * $b[0]) / 2);
+				$ry = $y - ((($anchorY + 1) * $b[1]) / 2);
+				if (!$baseLine) $ry += $f->getBaseLine($text);
+				//echo "";
+				imagettftext($this->i, $f->size, $f->angle, $rx, $ry, $color, $f->file, $text);
+			}
+		}
+		
 		function slice($x, $y, $w, $h) {
 			$i = new Image();
 			$i->i = $this->i;
@@ -83,7 +126,7 @@
 				$f = @self::$map_r[substr(strtolower(strrchr($name, '.')), 1)];
 			}
 			
-			if ($i->x != 0 || $i->y != 0 || $i->w != imageSX($i->i) || $i->h != imageSY($i->i)) {
+			if ($i->isSlice()) {
 				$i2 = $i;
 				$i = new Image($i->w, $i->h);
 				$i->put(0, 0, $i2);
