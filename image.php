@@ -97,7 +97,6 @@
 			}
 		}
 		
-		
 		function drawText($f, $x, $y, $text, $color = 0xFFFFFF, $anchorX = -1, $anchorY = -1, $baseLine = false) {
 			if ($this->isSlice()) {
 				throw(new Exception("Drawing in slices not implemented"));
