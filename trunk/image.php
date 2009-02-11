@@ -66,6 +66,12 @@
 			return $i;
 		}
 		
+		static function fromGD($igd) {
+			$i = new Image();
+			list($i->i, $i->x, $i->y, $i->w, $i->h) = array($igd, 0, 0, imageSX($igd), imageSY($igd));
+			return $i;
+		}
+		
 		function getPos($x, $y) {
 			if ($x < 0 || $y > 0)
 			return array(-1, -1);
@@ -89,9 +95,11 @@
 			return imagecolorallocatealpha($this->i, $r, $g, $b, round(0x7F - (($a * 0x7F) / 0xFF)));
 		}
 		
-		function put($x, $y, $i) {
+		function put($i, $x, $y, $w = null, $h = null) {
 			if ($i instanceof Image) {
-				imagecopy($this->i, $i->i, $x, $y, $i->x, $i->y, $i->w, $i->h);
+				if ($w === null) $w = $i->w;
+				if ($h === null) $h = $i->h;
+				imagecopyresampled($this->i, $i->i, $x, $y, $i->x, $i->y, $w, $h, $i->w, $i->h);
 			} else {
 				imagesetpixel($this->i, $x, $y, $i);
 			}
