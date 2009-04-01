@@ -43,11 +43,11 @@
 			$this->name = $name;
 		}
 		
-		public function addColumn($width = 40, $autofit = false, $style = 's20') {
+		public function addColumn($width = 40, $autofit = false, $style = 'default') {
 			$this->columns[] = array($width, $autofit, $style);
 		}
 		
-		public function addRow($row, $style = 's20') {
+		public function addRow($row, $style = 'default') {
 			$this->rows[] = array($row, $style);
 			$this->max_columns = max($this->max_columns, sizeof($row));
 		}
@@ -77,6 +77,9 @@
 								
 								switch (gettype($row[$n])) {
 									default: $type = 'String';
+										if (is_numeric($row[$n])) {
+											$type = 'Number';
+										}
 									break;
 									case 'integer': case 'double':
 										$type = 'Number';
@@ -117,6 +120,14 @@
 	</WorksheetOptions>
 DATA
 );
+				if ($this->fixed_rows == 1) {
+					/*
+					for ($n = 1; $n <= $this->max_columns; $n++) {
+						//fwrite($f, '<AutoFilter x:Range="R1C' . $n . ':R' . sizeof($this->rows) . 'C' . $n . '" xmlns="urn:schemas-microsoft-com:office:excel"></AutoFilter>' . "\n");
+					}
+					*/
+					fwrite($f, '<AutoFilter x:Range="R1C1:R1C' . $this->max_columns . '" xmlns="urn:schemas-microsoft-com:office:excel"></AutoFilter>');
+				}
 			fwrite($f, '</Worksheet>');
 		}
 	}
@@ -125,13 +136,17 @@ DATA
 		public $styles = array();
 		public $worksheets = array();
 		
+		public function __construct() {
+			$this->addStyle('default', array());
+		}
+		
 		public function addWorksheet($name) {
 			$this->worksheets[] = $page = new excel_worksheet($name);
 			return $page;
 		}
 
 		public function addStyle($name, $info = null) {
-			$this->styles[] = new excel_style($name, $info);
+			$this->styles[$name] = new excel_style($name, $info);
 		}
 
 		public function out($f = null) {
@@ -154,7 +169,7 @@ DATA
 
 				foreach ($this->worksheets as $worksheet) $worksheet->out($f);
 			}
-			fwrite($f, "</Workbook>\n");
+			fwrite($f, "\n</Workbook>\n");
 		}
 	}
 ?>
