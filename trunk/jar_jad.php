@@ -11,11 +11,13 @@ class Jar extends ZipArchive
 		$this->open( $name, 0 );
 	}
 	
-	public function getManifest() {
-		return fread( $this->getStream( 'META-INF/MANIFEST.MF' ), 0x10000 );
+	public function getManifest()
+	{
+		return fread( $this->getStream( 'META-INF/MANIFEST.MF' ), PHP_INT_MAX );
 	}
 	
-	public function createJad() {
+	public function createJad()
+	{
 		return (
 			"MIDlet-Jar-Size: {$this->size}\n" . 
 			"MIDlet-Jar-URL: {$this->name}\n" .
@@ -25,7 +27,7 @@ class Jar extends ZipArchive
 }
 
 /*
-$jar = new Jar('WebViewer.jar.zip');
+// Example.
+$jar = new Jar( 'file.jar' );
 echo $jar->createJad();
 */
-?>
