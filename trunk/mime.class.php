@@ -47,11 +47,13 @@ class MimeDocument {
 
 	public function getSubject() {
 		$text = $this->headers['subject'];
-		$text = quoted_printable_decode($text);
 		// Very faked:
-		if (substr($text, 0, 15) == '=?ISO-8859-1?Q?') {
-			$text = mb_convert_encoding(substr($text, 15), 'utf-8', 'iso-8859-1');
+		if (strpos($text, '=?ISO-8859-1?Q?') !== false) {
+			$text = str_replace('=?ISO-8859-1?Q?', '', $text);
+			$text = preg_replace('@\\?=\\s?@', '', $text);
+			$text = mb_convert_encoding($text, 'utf-8', 'iso-8859-1');
 		}
+		$text = quoted_printable_decode($text);
 		return str_replace('_', ' ', $text);
 	}
 
