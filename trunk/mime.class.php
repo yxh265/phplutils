@@ -23,12 +23,12 @@ class MimeDocument {
 
 	public function getBodyText() {
 		$list = $this->childs[0]->find('content-type', '@text/plain@');
-		return count($list) ? $list[0]->getContent() : '';
+		return count($list) ? $list[0]->getContentUtf8() : '';
 	}
 
 	public function getBodyHtml() {
 		$list = $this->childs[0]->find('content-type', '@text/html@');
-		return count($list) ? $list[0]->getContent() : '';
+		return count($list) ? $list[0]->getContentUtf8() : $this->getBodyText();
 	}
 	
 	public function getContent() {
@@ -36,8 +36,23 @@ class MimeDocument {
 		return count($this->childs) ? $this->childs[0]->getContent() : null;
 	}
 
+	public function getContentUtf8() {
+		$content = $this->getContent();
+		if (isset($this->headers['content-type']) && preg_match('@charset=(\\S*)@', $this->headers['content-type'], $matches)) {
+			$content = mb_convert_encoding($content, 'utf-8', $matches[1]);
+		}
+		return $content;
+
+	}
+
 	public function getSubject() {
-		return $this->headers['subject'];
+		$text = $this->headers['subject'];
+		$text = quoted_printable_decode($text);
+		// Very faked:
+		if (substr($text, 0, 15) == '=?ISO-8859-1?Q?') {
+			$text = mb_convert_encoding(substr($text, 15), 'utf-8', 'iso-8859-1');
+		}
+		return str_replace('_', ' ', $text);
 	}
 
 	public function getFrom() {
