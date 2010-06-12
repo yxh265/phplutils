@@ -66,11 +66,19 @@ class MimeDocument {
 	public function getDate() {
 		return strtotime($this->headers['date']);
 	}
+	
+	public function getContentType() {
+		if (isset($this->headers['content-type'])) {
+			$list = explode(';', $this->headers['content-type'], 2);
+			return strtolower(trim($list[0]));
+		}
+		return mime_content_type($this->filename);
+	}
 
 	public function getAttachments() {
 		$attachments = array();
-		if ($this->isAttachment()) $attachments[basename($this->filename)] = $this->getContent();
-		foreach ($this->childs as $child) if ($child->isAttachment()) $attachments[basename($child->filename)] = $child->getContent();
+		if ($this->isAttachment()) $attachments[] = $this;
+		foreach ($this->childs as $child) if ($child->isAttachment()) $attachments[] = $child;
 		return $attachments;
 	}
 }
