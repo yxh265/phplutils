@@ -10,6 +10,27 @@ class MimeDocument {
 		return strlen($this->filename);
 	}
 	
+	public function find($header, $pattern, &$matches = null, $reset = true) {
+		if ($reset) $matches = array();
+		if (isset($this->headers[$header]) && preg_match($pattern, $this->headers[$header])) {
+			$matches[] = $this;
+		}
+		foreach ($this->childs as $child) {
+			$child->find($header, $pattern, $matches, false);
+		}
+		return $matches;
+	}
+
+	public function getBodyText() {
+		$list = $this->childs[0]->find('content-type', '@text/plain@');
+		return count($list) ? $list[0]->getContent() : '';
+	}
+
+	public function getBodyHtml() {
+		$list = $this->childs[0]->find('content-type', '@text/html@');
+		return count($list) ? $list[0]->getContent() : '';
+	}
+	
 	public function getContent() {
 		if ($this->content !== null) return $this->content;
 		return count($this->childs) ? $this->childs[0]->getContent() : null;
@@ -150,5 +171,7 @@ print_r($document->getSubject());
 print_r($document->getFrom());
 print_r($document->getTo());
 print_r($document->getContent());
+print_r($document->getBodyText());
+print_r($document->getBodyHtml());
 print_r($document->getAttachments());
 */
