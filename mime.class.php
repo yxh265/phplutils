@@ -1,26 +1,66 @@
 <?php
 
+class MimeDocument {
+	public $filename;
+	public $headers;
+	public $content;
+	public $childs;
+
+	public function isAttachment() {
+		return strlen($this->filename);
+	}
+	
+	public function getContent() {
+		if ($this->content !== null) return $this->content;
+		return count($this->childs) ? $this->childs[0]->getContent() : null;
+	}
+
+	public function getSubject() {
+		return $this->headers['subject'];
+	}
+
+	public function getFrom() {
+		return $this->headers['from'];
+	}
+
+	public function getTo() {
+		return $this->headers['to'];
+	}
+	
+	public function getDate() {
+		return strtotime($this->headers['date']);
+	}
+
+	public function getAttachments() {
+		$attachments = array();
+		if ($this->isAttachment()) $attachments[basename($this->filename)] = $this->getContent();
+		foreach ($this->childs as $child) if ($child->isAttachment()) $attachments[basename($child->filename)] = $child->getContent();
+		return $attachments;
+	}
+}
+
 class Mime {
 	protected $data;
 	protected $cursor;
-	public $info;
+	public $document;
 
 	public function __construct($data) {
 		$this->data = $data;
 		$this->cursor = 0;
-		$this->info = array();
-		$info = &$this->info;
+		$this->document = new MimeDocument;
+		$headers = array();
+		$document = &$this->document;
 		$last = '';
 		$content = '';
 		while (!$this->eof()) {
 			$line = $this->readline();
 			if (preg_match('@^([\\w-]+):(.*)$@', $line, $matches)) {
 				$key   = strtolower($matches[1]);
-				if (!isset($info[$key])) {
-					$last = &$info[$key];
+				if (!isset($headers[$key])) {
+					$last = &$headers[$key];
 				} else {
-					if (!is_array($info[$key])) $info[$key] = array($info[$key]);
-					$last = &$info[$key][];
+					if (!is_array($headers[$key])) $headers[$key] = array($headers[$key]);
+					$last = &$headers[$key][];
 				}
 				$last = trim($matches[2]);
 			} else {
@@ -32,31 +72,46 @@ class Mime {
 			}
 		}
 		
-		if (preg_match('@^multipart/(mixed|alternative); boundary=(?P<boundary>.*)$@', $info['content-type'], $matches)) {
-			$boundary = "--{$matches['boundary']}";
-			$info['content'] = array();
-			foreach (array_slice(explode($boundary, $content), 1) as $part) {
-				if (substr($part, 0, 2) == '--') break;
-				$mime = new Mime(ltrim($part));
-				$info['content'][] = $mime->info;
+		$document = new MimeDocument;
+		$document->headers = $headers;
+		$document->filename = '';
+		$document->content = null;
+		$document->childs = array();
+
+		if (isset($headers['content-type'])) {
+			if (preg_match('@^multipart/(mixed|alternative); boundary=(?P<boundary>.*)$@', $headers['content-type'], $matches)) {
+				$boundary = "--{$matches['boundary']}";
+				foreach (array_slice(explode($boundary, $content), 1) as $part) {
+					if (substr($part, 0, 2) == '--') break;
+					$mime = new Mime(ltrim($part));
+					$document->childs[] = $mime->document;
+				}
+				return;
 			}
-			return;
 		}
 
-		if (isset($info['content-transfer-encoding'])) {
-			switch ($info['content-transfer-encoding']) {
+		if (isset($headers['content-type'])) {
+			if (preg_match('@name=\"(.*)\"@', $headers['content-type'], $matches)) {
+				$document->filename = basename($matches[1]);
+			}
+		}
+
+		if (isset($headers['content-disposition'])) {
+			if (preg_match('@attachment; filename=\"(.*)\"@', $headers['content-disposition'], $matches)) {
+				$document->filename = basename($matches[1]);
+			}
+		}
+
+		$document->content = $content;
+		if (isset($headers['content-transfer-encoding'])) {
+			switch ($headers['content-transfer-encoding']) {
 				case 'base64':
-					$info['content'] = base64_decode($content);
+					$document->content = base64_decode($content);
 				break;
 				case 'quoted-printable':
-					$info['content'] = quoted_printable_decode($content);
-				break;
-				case '': default:
-					$info['content'] = $content;
+					$document->content = quoted_printable_decode($content);
 				break;
 			}
-		} else {
-			$info['content'] = $content;
 		}
 	}
 	
@@ -85,8 +140,15 @@ class Mime {
 
 	static public function parse($data) {
 		$mime = new Mime($data);
-		return $mime->info;
+		return $mime->document;
 	}
 }
 
-//print_r(Mime::parse(file_get_contents('emails/4.txt')));
+/*
+$document = Mime::parse(file_get_contents('emails/4.txt'));
+print_r($document->getSubject());
+print_r($document->getFrom());
+print_r($document->getTo());
+print_r($document->getContent());
+print_r($document->getAttachments());
+*/
