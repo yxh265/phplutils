@@ -5,7 +5,7 @@ class GettextMoGenerator {
 	/**
 	 * @var $strings List of strings as an associative array. Keys are original strings and values the translation strings.
 	 */
-	public $strings = array();
+	protected $strings = array();
 	
 	/**
 	 * Writes the .mo contents into a file.
@@ -86,20 +86,14 @@ class GettextMoGenerator {
 		return fread($f, $fsize);
 	}
 
-	/**
-	 * Acts as a gettext function using the translations in this object.
-	 *
-	 * @return string
-	 */
-	public function _($o) {
-		$t = &$this->strings[$o];
-		return isset($t) ? $t : $o;
+	public function addTranslation($o, $t) {
+		if (is_array($o)) $o = implode("\0", $o);
+		if (is_array($t)) $t = implode("\0", $t);
+		$this->strings[$o] = $t;
 	}
 	
 	/**
 	 * Obtains a GettextMoGenerator instance with the $strings field filled with the contents of the .po.
-	 *
-	 * @todo Implement
 	 *
 	 * @return string
 	 */
@@ -112,19 +106,38 @@ class GettextMoGenerator {
 		while (!feof($f)) {
 			$line = trim(fgets($f));
 			if (!strlen($line) || ($line[0] == '#')) continue; // Ignore empty lines and comments
-			if (preg_match('@^((msgid|msgstr)\\s+)?"(.*)"$@', $line, $matches)) {
-				list(,,$type,$text) = $matches;
+			if (preg_match('@^((msgid|msgid_plural|(msgstr(\\[(\\d+)\\])?))\\s+)?"(.*)"$@', $line, $matches)) {
+				list($type)  = explode('[', $matches[1], 2); $type = trim($type);
+				$index = (int)$matches[5];
+				$text  = $matches[6];
+				
+				//echo "$type, $index, $text\n";
+				
+				//exit;
 				$text = stripcslashes($text);
 				switch ($type) {
 					case 'msgid':
 						$msgid = $text;
 					break;
+					case 'msgid_plural':
+						$msgid .= "\0{$text}";
+					break;
 					case 'msgstr':
-						$s = &$mo->strings[$msgid];
+						$s = &$mo->strings[$msgid][$index];
 						if (!isset($s)) $s = '';
 						$s .= $text;
 					break;
+					case '':
+						$s = &$mo->strings[$msgid][$index];
+						$s .= $text;
+					break;
 				}
+			}
+		}
+		
+		foreach (array_keys($mo->strings) as $k) {
+			if (is_array($mo->strings[$k])) {
+				$mo->strings[$k] = implode("\0", $mo->strings[$k]);
 			}
 		}
 		
@@ -140,6 +153,8 @@ GettextMoGenerator::fromPo('test.po')->write('test.mo');
 $mo = new GettextMoGenerator();
 //$mo->strings['test'] = 'prueba';
 $mo->strings['Genres'] = 'Géneros';
+$mo->addTranslation('Genres', 'Géneros');
+$mo->addTranslation(array('Singular', 'Plural'), array('Singular', 'Plural1', 'Plural2'));
 $mo->write('test.mo');
 //echo $mo->getAsString();
 */
