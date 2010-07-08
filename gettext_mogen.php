@@ -104,21 +104,37 @@ class GettextMoGenerator {
 	 * @return string
 	 */
 	static public function fromPo($file) {
-		throw(new Exception("Unimplemented"));
-		/*
 		$f = fopen($file, 'rb');
 		if (!$f) throw(new Exception("Can't open po file '{$file}' for reading"));
 		$mo = new self();
 		
+		$msgid = '';
 		while (!feof($f)) {
 			$line = trim(fgets($f));
 			if (!strlen($line) || ($line[0] == '#')) continue; // Ignore empty lines and comments
+			if (preg_match('@^((msgid|msgstr)\\s+)?"(.*)"$@', $line, $matches)) {
+				list(,,$type,$text) = $matches;
+				$text = stripcslashes($text);
+				switch ($type) {
+					case 'msgid':
+						$msgid = $text;
+					break;
+					case 'msgstr':
+						$s = &$mo->strings[$msgid];
+						if (!isset($s)) $s = '';
+						$s .= $text;
+					break;
+				}
+			}
 		}
 		
 		return $mo;
-		*/
 	}
 }
+
+/*
+GettextMoGenerator::fromPo('test.po')->write('test.mo');
+*/
 
 /*
 $mo = new GettextMoGenerator();
