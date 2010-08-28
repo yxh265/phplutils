@@ -18,7 +18,7 @@ HMODULE GetCurrentModuleHandle() {
 	HMODULE hMod = NULL;
 	HANDLE lib = LoadLibraryA("kernel32.dll");
 	void *GetModuleHandleExW = GetProcAddress(lib, "GetModuleHandleExW");
-	((BOOL(* WINAPI)(DWORD, LPCTSTR, HMODULE *))GetModuleHandleExW)(6, (LPCWSTR)(&GetCurrentModuleHandle), &hMod);
+	((BOOL(* WINAPI)(DWORD, LPCTSTR, HMODULE *))GetModuleHandleExW)((DWORD)6, (LPCWSTR)(void *)(&GetCurrentModuleHandle), &hMod);
 	return hMod;
 }
 
@@ -134,9 +134,16 @@ __stdcall void func_caller_end_call(FUNCTION_CALL* fc, int ht, zval *return_valu
 	int n;
 	int esp_add = 0;
 	
+	return_value->type = IS_NULL;
+	
 	result = _zend_get_parameters_array_ex(num_params, args, tsrm_ls);
 	if (result == -1) {
-		fprintf(stderr, "Invalid parameters");
+		zend_error(E_WARNING, "Invalid parameters\n");
+		return;
+	}
+	
+	if (!fc || !fc->func) {
+		zend_error(E_WARNING, "Invalid call\n");
 		return;
 	}
 
@@ -158,7 +165,7 @@ __stdcall void func_caller_end_call(FUNCTION_CALL* fc, int ht, zval *return_valu
 					esp_add += 4;
 				break;
 				default:
-					fprintf(stderr, "Unknown param format '%c'", n);
+					zend_error(E_WARNING, "Unknown param format '%c'", n);
 				break;
 			}
 		}
@@ -213,23 +220,58 @@ void* CREATE_HANDLER(char* format, void* func, int call_type) {
 void *GetLibraryProcAddress(char* library, char* symbol) {
 	HANDLE lib = LoadLibraryA(library);
 	if (lib == NULL) {
-		fprintf(stderr, "Can't load library '%s'", library);
+		zend_error(E_WARNING, "Can't load library '%s'", library);
+		return NULL;
 	}
 	void* func = GetProcAddress(lib, symbol);
 	if (func == NULL) {
-		fprintf(stderr, "Can't find symbol '%s' in library '%s'", symbol, library);
+		zend_error(E_WARNING, "Can't find symbol '%s' in library '%s'", symbol, library);
+		return NULL;
 	}
 	return func;
 }
 
+void dummy_func_handler(int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, int return_value_used, void ***tsrm_ls) {
+}
+
+typedef struct _UNREGISTER_FUNCTION_LIST {
+	zend_function_entry *functions;
+	struct _UNREGISTER_FUNCTION_LIST *next;
+} UNREGISTER_FUNCTION_LIST;
+
+UNREGISTER_FUNCTION_LIST unregister_first = {0};
+UNREGISTER_FUNCTION_LIST *unregister_last = &unregister_first;
+
+void add_unregister(zend_function_entry *functions) {
+	unregister_last->next = malloc(UNREGISTER_FUNCTION_LIST);
+	unregister_last->next->functions = functions;
+	unregister_last->next->next = NULL;
+	unregister_last = unregister_last->next;
+}
+
+void unregister_list(void ***tsrm_ls) {
+	UNREGISTER_FUNCTION_LIST *current = &unregister_first;
+	while (current = current->next) {
+		if (current->functions) {
+			printf("Unregistering...%s\n", current->functions[0].fname);
+			zend_unregister_functions(current->functions, 1, NULL, tsrm_ls);
+		}
+	}
+}
+
 void RegisterFunction(char *name, char *format, void* func, int calltype, void ***tsrm_ls) {
-	module_functions[0].fname = name;
-	module_functions[0].handler = CREATE_HANDLER(format, func, calltype);
-	module_functions[0].arg_info = NULL;
-	module_functions[0].num_args = 0;
-	module_functions[0].flags = 0;
-	
-	zend_register_functions(NULL, module_functions, NULL, 0, tsrm_ls);
+	zend_function_entry *local_module_functions = (zend_function_entry *)malloc(sizeof(zend_function_entry) * 2); memset(local_module_functions, 0, sizeof(zend_function_entry) * 2);
+	//zend_function_entry *local_module_functions = module_functions;
+
+	local_module_functions[0].fname = name;
+	local_module_functions[0].handler = CREATE_HANDLER(format, func, calltype);
+	//local_module_functions[0].handler = dummy_func_handler;
+	local_module_functions[0].arg_info = NULL;
+	local_module_functions[0].num_args = 0;
+	local_module_functions[0].flags = 0;
+
+	add_unregister(local_module_functions);
+	zend_register_functions(NULL, local_module_functions, NULL, 1/* MODULE_PERSISTENT */, tsrm_ls);
 }
 
 int module_startup_func(int type, int module_number, void ***tsrm_ls) {
@@ -244,16 +286,16 @@ int module_startup_func(int type, int module_number, void ***tsrm_ls) {
 	//printf("%08X\n", module_startup_func);
 	printf("module_startup_func\n");
 
-	return 0;
+	return SUCCESS;
 }
 
 int module_shutdown_func(int type, int module_number, void ***tsrm_ls) {
 	printf("module_shutdown_func\n");
-	return 0;
+	return SUCCESS;
 }
 
 char* dup_str(char* s) {
-	char* ret = malloc(strlen(s) + 1);
+	char* ret = (char *)malloc(strlen(s) + 1);
 	strcpy(ret, s);
 	return ret;
 }
@@ -264,9 +306,12 @@ void PHP_RegisterFunction(int ht, zval *return_value, zval **return_value_ptr, z
 	char *dll; int dll_len;
 	char *dll_symbol; int dll_symbol_len;
 	int calltype = CALL_TYPE_C;
+	
+	return_value->type = IS_NULL;
+	
 	// http://www.hospedajeydominios.com/mambo/documentacion-manual_php-pagina-zend_arguments_retrieval.html
 	if (zend_parse_parameters(ht, tsrm_ls, "ssss|l", &fname, &fname_len, &format, &format_len, &dll, &dll_len, &dll_symbol, &dll_symbol_len, &calltype) == FAILURE) {
-		fprintf(stderr, "Bad call for RegisterFunction");
+		zend_error(E_WARNING, "Bad call for RegisterFunction");
 		return;
 	}
 
@@ -279,7 +324,7 @@ int request_startup_func(int type, int module_number, void ***tsrm_ls) {
 	static int once = 1;
 
 	if (once) { once = 0;
-		func_caller_end();
+		func_caller_end(); // to avoid symbol deletion
 
 		module_functions[0].fname = "RegisterFunction";
 		module_functions[0].handler = PHP_RegisterFunction;
@@ -287,17 +332,19 @@ int request_startup_func(int type, int module_number, void ***tsrm_ls) {
 		module_functions[0].num_args = 0;
 		module_functions[0].flags = 0;
 		zend_register_functions(NULL, module_functions, NULL, 0, tsrm_ls);
+		add_unregister(module_functions);
 		
 		zval* retval;
-		zend_eval_string(_binary_dynacall_init_php_start + 5, NULL, "(eval)", tsrm_ls);
+		zend_eval_string(((char *)_binary_dynacall_init_php_start) + 5, retval, "(eval)", tsrm_ls);
 	}
 
-	return 0;
+	return SUCCESS;
 }
 
 int request_shutdown_func(int type, int module_number, void ***tsrm_ls) {
+	unregister_list(tsrm_ls);
 	printf("request_shutdown_func\n");
-	return 0;
+	return SUCCESS;
 }
 
 void info_func(zend_module_entry *zend_module, void ***tsrm_ls) {

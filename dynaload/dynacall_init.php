@@ -31,6 +31,8 @@ function parse_comma_expression_expand($comma, $lookup = array()) {
 	}, $list);
 }
 
+if (!defined('DYNACALL_PATH')) define('DYNACALL_PATH', '.');
+
 foreach (glob(sprintf('%s/*.dynalib', DYNACALL_PATH)) as $file) {
 	$dll = '';
 	$calltype = CALL_TYPE_C;
@@ -59,5 +61,3 @@ foreach (glob(sprintf('%s/*.dynalib', DYNACALL_PATH)) as $file) {
 		}
 	}
 }
-
-//echo DYNACALL_PATH;
