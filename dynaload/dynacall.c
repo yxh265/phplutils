@@ -6,185 +6,23 @@ tcc -run dynacall.c
 #include <stdio.h>
 #include <stdint.h>
 #include <windows.h>
+#include "miniphp.h"
 
 #ifdef x64
 	#error Not implemented yet
 #endif
 
-#define ZEND_DEBUG 0
+char dll_path[1024] = {0};
 
-#ifdef ZTS
-#define USING_ZTS 1
-#else
-#define USING_ZTS 0
-#endif
+HMODULE GetCurrentModuleHandle() {
+	HMODULE hMod = NULL;
+	HANDLE lib = LoadLibraryA("kernel32.dll");
+	void *GetModuleHandleExW = GetProcAddress(lib, "GetModuleHandleExW");
+	((BOOL(* WINAPI)(DWORD, LPCTSTR, HMODULE *))GetModuleHandleExW)(6, (LPCWSTR)(&GetCurrentModuleHandle), &hMod);
+	return hMod;
+}
 
-typedef unsigned int zend_uint;
-typedef unsigned int uint;
-typedef unsigned long long ulong;
-
-typedef unsigned char zend_bool;
-typedef unsigned char zend_uchar;
-typedef unsigned int zend_uint;
-typedef unsigned long zend_ulong;
-typedef unsigned short zend_ushort;
-
-typedef struct _zend_module_entry zend_module_entry;
-typedef struct _zval_struct zval;
-typedef struct _zend_class_entry zend_class_entry;
-typedef unsigned int zend_object_handle;
-typedef struct _zend_object_handlers zend_object_handlers;
-
-struct _hashtable;
-
-typedef struct bucket {
-	ulong h;						/* Used for numeric indexing */
-	uint nKeyLength;
-	void *pData;
-	void *pDataPtr;
-	struct bucket *pListNext;
-	struct bucket *pListLast;
-	struct bucket *pNext;
-	struct bucket *pLast;
-	char arKey[1]; /* Must be last element */
-} Bucket;
-
-typedef struct _hashtable {
-	uint nTableSize;
-	uint nTableMask;
-	uint nNumOfElements;
-	ulong nNextFreeElement;
-	Bucket *pInternalPointer;	/* Used for element traversal */
-	Bucket *pListHead;
-	Bucket *pListTail;
-	Bucket **arBuckets;
-	void* pDestructor;
-	zend_bool persistent;
-	unsigned char nApplyCount;
-	zend_bool bApplyProtection;
-#if ZEND_DEBUG
-	int inconsistent;
-#endif
-} HashTable;
-
-typedef struct _zend_function_entry {
-	const char *fname;
-	void (*handler)(int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, int return_value_used, void ***tsrm_ls);
-	const struct _zend_arg_info *arg_info;
-	zend_uint num_args;
-	zend_uint flags;
-} zend_function_entry;
-
-struct _zend_module_entry {
-	unsigned short size;
-	unsigned int zend_api;
-	unsigned char zend_debug;
-	unsigned char zts;
-	const struct _zend_ini_entry *ini_entry;
-	const struct _zend_module_dep *deps;
-	const char *name;
-	const struct _zend_function_entry *functions;
-	int (*module_startup_func  )(int type, int module_number, void ***tsrm_ls);
-	int (*module_shutdown_func )(int type, int module_number, void ***tsrm_ls);
-	int (*request_startup_func )(int type, int module_number, void ***tsrm_ls);
-	int (*request_shutdown_func)(int type, int module_number, void ***tsrm_ls);
-	void (*info_func)(zend_module_entry *zend_module, void ***tsrm_ls);
-	const char *version;
-	size_t globals_size;
-#ifdef ZTS
-	ts_rsrc_id* globals_id_ptr;
-#else
-	void* globals_ptr;
-#endif
-	void (*globals_ctor)(void *global, void ***tsrm_ls);
-	void (*globals_dtor)(void *global, void ***tsrm_ls);
-	int (*post_deactivate_func)(void);
-	int module_started;
-	unsigned char type;
-	void *handle;
-	int module_number;
-	char *build_id;
-};
-
-typedef struct _zend_guard {
-	zend_bool in_get;
-	zend_bool in_set;
-	zend_bool in_unset;
-	zend_bool in_isset;
-	zend_bool dummy; /* sizeof(zend_guard) must not be equal to sizeof(void*) */
-} zend_guard;
-
-typedef struct _zend_object {
-	zend_class_entry *ce;
-	HashTable *properties;
-	HashTable *guards; /* protects from __get/__set ... recursion */
-} zend_object;
-
-struct _zend_object_handlers {
-	/* general object functions */
-	void* add_ref;
-	void* del_ref;
-	void* clone_obj;
-	/* individual object functions */
-	void* read_property;
-	void* write_property;
-	void* read_dimension;
-	void* write_dimension;
-	void* get_property_ptr_ptr;
-	void* get;
-	void* set;
-	void* has_property;
-	void* unset_property;
-	void* has_dimension;
-	void* unset_dimension;
-	void* get_properties;
-	void* get_method;
-	void* call_method;
-	void* get_constructor;
-	void* get_class_entry;
-	void* get_class_name;
-	void* compare_objects;
-	void* cast_object;
-	void* count_elements;
-	void* get_debug_info;
-	void* get_closure;
-};
-
-typedef struct _zend_object_value {
-	zend_object_handle handle;
-	zend_object_handlers *handlers;
-} zend_object_value;
-
-typedef union _zvalue_value {
-	long lval;					/* long value */
-	double dval;				/* double value */
-	struct {
-		char *val;
-		int len;
-	} str;
-	HashTable *ht;				/* hash table value */
-	zend_object_value obj;
-} zvalue_value;
-
-struct _zval_struct {
-	/* Variable information */
-	zvalue_value value;		/* value */
-	zend_uint refcount__gc;
-	zend_uchar type;	/* active type */
-	zend_uchar is_ref__gc;
-};
-
-extern void php_info_print_table_start();
-extern void php_info_print_table_header(int, ...);
-extern void php_info_print_table_row(int, ...);
-extern void php_info_print_table_row_ex(int, const char *, ...);
-extern void php_info_print_table_end();
-
-extern void zend_register_long_constant(const char *name, unsigned int name_len, long lval, int flags, int module_number, void ***tsrm_ls);
-extern int  zend_register_functions(zend_class_entry *scope, const zend_function_entry *functions, HashTable *function_table, int type, void ***tsrm_ls);
-extern int _zend_get_parameters_array_ex(int param_count, zval ***argument_array, void ***tsrm_ls);
-extern void convert_to_long(zval *op);
-extern void _convert_to_string(zval *op, char*, int);
+extern volatile unsigned char _binary_dynacall_init_php_start[];
 
 /*
 int WINAPI MessageBox(
@@ -205,6 +43,14 @@ int WINAPI MessageBox(
 	__CallBuffer_push_value_increment(uint32_t, (value)); \
 	__CallBuffer_push_value_increment(uint8_t, 0x50); \
 }
+
+// ADD ESP, value
+#define CallBuffer_add_esp(value) { \
+	__CallBuffer_push_value_increment(uint8_t, 0x81); \
+	__CallBuffer_push_value_increment(uint8_t, 0xC4); \
+	__CallBuffer_push_value_increment(uint32_t, (value)); \
+}
+
 
 // MOV EAX, value
 // CALL EAX
@@ -251,6 +97,10 @@ void main_test() {
 		CallBuffer_push_32("World");
 		CallBuffer_push_32(0);
 	}
+	CallBuffer_call(func);
+	CallBuffer_add_esp(4 * 4);
+	CallBuffer_ret();
+	CallBuffer_execute();
 	CallBuffer_call_ret_execute(func);
 	
 	printf("%08X, %08X\n", lib, func);
@@ -264,10 +114,27 @@ const zend_function_entry module_functions[] = {
 
 #define convert_to_string(zval) _convert_to_string((zval), __FILE__, __LINE__)
 
-void test(int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, int return_value_used, void ***tsrm_ls) {
-	zval** args[4] = {0};
+#define FUNCTION_CALL_MAGIC 0xF755557F
+
+#define CALL_TYPE_C        0
+#define CALL_TYPE_WINDOWS  1
+
+typedef struct {
+	unsigned int magic;
+	char* format;
+	int call_type;
+	void* func;
+} FUNCTION_CALL;
+
+__stdcall void func_caller_end_call(FUNCTION_CALL* fc, int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, int return_value_used, void ***tsrm_ls) {
+//void func_caller_end() {
+	zval** args[64] = {0};
 	int result;
-	result = _zend_get_parameters_array_ex(4, args, tsrm_ls);
+	int num_params = strlen(fc->format);
+	int n;
+	int esp_add = 0;
+	
+	result = _zend_get_parameters_array_ex(num_params, args, tsrm_ls);
 	if (result == -1) {
 		fprintf(stderr, "Invalid parameters");
 		return;
@@ -276,35 +143,107 @@ void test(int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, i
 	char *function = (char *)VirtualAlloc(NULL, 1024, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 	char *function_pointer;
 
-	convert_to_long(*args[0]);
-	convert_to_string(*args[1]);
-	convert_to_string(*args[2]);
-	convert_to_long(*args[3]);
-
 	CallBuffer_reset();
 	{
-		CallBuffer_push_32((*args[0])->value.lval);
-		CallBuffer_push_32((*args[1])->value.str.val);
-		CallBuffer_push_32((*args[2])->value.str.val);
-		CallBuffer_push_32((*args[3])->value.lval);
+		for (n = 0; n < num_params; n++) {
+			switch (fc->format[n]) {
+				case 'i':
+					convert_to_long(*args[n]);
+					CallBuffer_push_32((*args[0])->value.lval);
+					esp_add += 4;
+				break;
+				case 's':
+					convert_to_string(*args[n]);
+					CallBuffer_push_32((*args[1])->value.str.val);
+					esp_add += 4;
+				break;
+				default:
+					fprintf(stderr, "Unknown param format '%c'", n);
+				break;
+			}
+		}
 	}
-	CallBuffer_call_ret_execute(MessageBoxA);
-
-	return;
+	CallBuffer_call(fc->func);
+	if (fc->call_type == CALL_TYPE_C) {
+		CallBuffer_add_esp(esp_add);
+	}
+	CallBuffer_ret();
+	CallBuffer_execute();
 }
 
-int module_startup_func(int type, int module_number, void ***tsrm_ls) {
-	//zend_register_long_constant("test", 5, 99, 0, 0, tsrm_ls);
-	
-	module_functions[0].fname = "test";
-	module_functions[0].handler = test;
+char* get_EIP(void) {
+	__asm("movl +0x04(%ebp), %eax;");
+}
+
+
+typedef int(* PRINTF)(const char*, ...);
+
+void func_caller(int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, int return_value_used, void ***tsrm_ls) {
+	char*(* _get_EIP)(void) = get_EIP;
+	int(* _printf)(const char*, ...) = printf;
+	char *fc_base = _get_EIP();
+	FUNCTION_CALL *fc;
+	while (1) {
+		fc_base--;
+		fc = (FUNCTION_CALL *)fc_base;
+		if (fc->magic == FUNCTION_CALL_MAGIC) {
+			break;
+		}
+	}
+	void (* __stdcall _func_caller_end_call)(FUNCTION_CALL* fc, int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, int return_value_used, void ***tsrm_ls) = func_caller_end_call;
+
+	_func_caller_end_call(fc, ht, return_value, return_value_ptr, this_ptr, return_value_used, tsrm_ls);
+}
+
+void func_caller_end() {
+}
+
+void* CREATE_HANDLER(char* format, void* func, int call_type) {
+	int func_size = (char *)func_caller_end - (char *)func_caller;
+	//printf("SIZE: %d\n", func_size);
+	char *data = (char *)VirtualAlloc(NULL, sizeof(FUNCTION_CALL) + func_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+	((FUNCTION_CALL *)data)->magic     = FUNCTION_CALL_MAGIC;
+	((FUNCTION_CALL *)data)->format    = format;
+	((FUNCTION_CALL *)data)->func      = func;
+	((FUNCTION_CALL *)data)->call_type = call_type;
+	memcpy(data + sizeof(FUNCTION_CALL), func_caller, func_size);
+	return data + sizeof(FUNCTION_CALL);
+}
+
+void *GetLibraryProcAddress(char* library, char* symbol) {
+	HANDLE lib = LoadLibraryA(library);
+	if (lib == NULL) {
+		fprintf(stderr, "Can't load library '%s'", library);
+	}
+	void* func = GetProcAddress(lib, symbol);
+	if (func == NULL) {
+		fprintf(stderr, "Can't find symbol '%s' in library '%s'", symbol, library);
+	}
+	return func;
+}
+
+void RegisterFunction(char *name, char *format, void* func, int calltype, void ***tsrm_ls) {
+	module_functions[0].fname = name;
+	module_functions[0].handler = CREATE_HANDLER(format, func, calltype);
 	module_functions[0].arg_info = NULL;
 	module_functions[0].num_args = 0;
 	module_functions[0].flags = 0;
 	
 	zend_register_functions(NULL, module_functions, NULL, 0, tsrm_ls);
+}
 
+int module_startup_func(int type, int module_number, void ***tsrm_ls) {
+	GetModuleFileName(GetCurrentModuleHandle(), dll_path, sizeof(dll_path));
+	strrchr(dll_path, '\\')[0] = 0;
+	//printf("'%s'\n", dll_path);
+
+	zend_register_long_constant("CALL_TYPE_WINDOWS", 18, CALL_TYPE_WINDOWS, 0, 0, tsrm_ls);
+	zend_register_long_constant("CALL_TYPE_C", 12, CALL_TYPE_C, 0, 0, tsrm_ls);
+	zend_register_string_constant("DYNACALL_PATH", 14, dll_path, 0, 0, tsrm_ls);
+	
+	//printf("%08X\n", module_startup_func);
 	printf("module_startup_func\n");
+
 	return 0;
 }
 
@@ -313,8 +252,46 @@ int module_shutdown_func(int type, int module_number, void ***tsrm_ls) {
 	return 0;
 }
 
+char* dup_str(char* s) {
+	char* ret = malloc(strlen(s) + 1);
+	strcpy(ret, s);
+	return ret;
+}
+
+void PHP_RegisterFunction(int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, int return_value_used, void ***tsrm_ls) {
+	char *fname; int fname_len;
+	char *format; int format_len;
+	char *dll; int dll_len;
+	char *dll_symbol; int dll_symbol_len;
+	int calltype = CALL_TYPE_C;
+	// http://www.hospedajeydominios.com/mambo/documentacion-manual_php-pagina-zend_arguments_retrieval.html
+	if (zend_parse_parameters(ht, tsrm_ls, "ssss|l", &fname, &fname_len, &format, &format_len, &dll, &dll_len, &dll_symbol, &dll_symbol_len, &calltype) == FAILURE) {
+		fprintf(stderr, "Bad call for RegisterFunction");
+		return;
+	}
+
+	RegisterFunction(dup_str(fname), dup_str(format), GetLibraryProcAddress(dll, dll_symbol), calltype, tsrm_ls);
+}
+
 int request_startup_func(int type, int module_number, void ***tsrm_ls) {
 	printf("request_startup_func\n");
+	
+	static int once = 1;
+
+	if (once) { once = 0;
+		func_caller_end();
+
+		module_functions[0].fname = "RegisterFunction";
+		module_functions[0].handler = PHP_RegisterFunction;
+		module_functions[0].arg_info = NULL;
+		module_functions[0].num_args = 0;
+		module_functions[0].flags = 0;
+		zend_register_functions(NULL, module_functions, NULL, 0, tsrm_ls);
+		
+		zval* retval;
+		zend_eval_string(_binary_dynacall_init_php_start + 5, NULL, "(eval)", tsrm_ls);
+	}
+
 	return 0;
 }
 
@@ -341,11 +318,10 @@ zend_module_entry module_module_entry = {
 };
 
 __declspec(dllexport) zend_module_entry* get_module() {
-	//main_test(); printf("dynacall.get_module()");
 	return &module_module_entry;
 }
 
-/*int DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID lpvReserved) {
+/*__declspec(dllexport) int DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID lpvReserved) {
 	//printf("Hello!\n");
 	if (fdwReason) DisableThreadLibraryCalls(hInstance);
 	return 0;
