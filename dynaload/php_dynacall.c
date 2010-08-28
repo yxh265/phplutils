@@ -162,12 +162,12 @@ __stdcall void func_caller_end_call(FUNCTION_CALL* fc, int ht, zval *return_valu
 			switch (fc->format[n]) {
 				case 'i':
 					convert_to_long(*args[n]);
-					CallBuffer_push_32((*args[0])->value.lval);
+					CallBuffer_push_32((*args[n])->value.lval);
 					esp_add += 4;
 				break;
 				case 's':
 					convert_to_string(*args[n]);
-					CallBuffer_push_32((*args[1])->value.str.val);
+					CallBuffer_push_32((*args[n])->value.str.val);
 					esp_add += 4;
 				break;
 				default:
