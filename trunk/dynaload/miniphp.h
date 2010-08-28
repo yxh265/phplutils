@@ -6,7 +6,38 @@
 #define USING_ZTS 0
 #endif
 
+#define SUCCESS 0
 #define FAILURE -1
+
+#define IS_NULL		0
+#define IS_LONG		1
+#define IS_DOUBLE	2
+#define IS_BOOL		3
+#define IS_ARRAY	4
+#define IS_OBJECT	5
+#define IS_STRING	6
+#define IS_RESOURCE	7
+#define IS_CONSTANT	8
+#define IS_CONSTANT_ARRAY	9
+
+#define E_ERROR				(1<<0L)
+#define E_WARNING			(1<<1L)
+#define E_PARSE				(1<<2L)
+#define E_NOTICE			(1<<3L)
+#define E_CORE_ERROR		(1<<4L)
+#define E_CORE_WARNING		(1<<5L)
+#define E_COMPILE_ERROR		(1<<6L)
+#define E_COMPILE_WARNING	(1<<7L)
+#define E_USER_ERROR		(1<<8L)
+#define E_USER_WARNING		(1<<9L)
+#define E_USER_NOTICE		(1<<10L)
+#define E_STRICT			(1<<11L)
+#define E_RECOVERABLE_ERROR	(1<<12L)
+#define E_DEPRECATED		(1<<13L)
+#define E_USER_DEPRECATED	(1<<14L)
+
+#define E_ALL (E_ERROR | E_WARNING | E_PARSE | E_NOTICE | E_CORE_ERROR | E_CORE_WARNING | E_COMPILE_ERROR | E_COMPILE_WARNING | E_USER_ERROR | E_USER_WARNING | E_USER_NOTICE | E_RECOVERABLE_ERROR | E_DEPRECATED | E_USER_DEPRECATED)
+#define E_CORE (E_CORE_ERROR | E_CORE_WARNING)
 
 typedef unsigned int zend_uint;
 typedef unsigned int uint;
@@ -171,9 +202,11 @@ extern void php_info_print_table_end();
 
 extern void zend_register_long_constant(const char *name, unsigned int name_len, long lval, int flags, int module_number, void ***tsrm_ls);
 extern int  zend_register_functions(zend_class_entry *scope, const zend_function_entry *functions, HashTable *function_table, int type, void ***tsrm_ls);
+extern void zend_unregister_functions(const zend_function_entry *functions, int count, HashTable *function_table, void ***tsrm_ls);
 extern int _zend_get_parameters_array_ex(int param_count, zval ***argument_array, void ***tsrm_ls);
 extern void convert_to_long(zval *op);
 extern void _convert_to_string(zval *op, char*, int);
 extern int zend_eval_string(char *str, zval *retval_ptr, char *string_name, void ***tsrm_ls);
 extern int zend_parse_parameters(int num_args, void ***tsrm_ls, char *type_spec, ...);
 extern void zend_register_string_constant(const char *name, uint name_len, char *strval, int flags, int module_number, void ***tsrm_ls);
+extern void zend_error(int type, const char *format, ...);
