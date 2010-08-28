@@ -265,19 +265,21 @@ void unregister_list(void ***tsrm_ls) {
 	}
 }
 
-void RegisterFunction(char *name, char *format, void* func, int calltype, void ***tsrm_ls) {
+void RegisterFunctionHandler(char *name, void* handler, void ***tsrm_ls) {
 	zend_function_entry *local_module_functions = (zend_function_entry *)malloc(sizeof(zend_function_entry) * 2); memset(local_module_functions, 0, sizeof(zend_function_entry) * 2);
-	//zend_function_entry *local_module_functions = module_functions;
 
 	local_module_functions[0].fname = name;
-	local_module_functions[0].handler = CREATE_HANDLER(format, func, calltype);
-	//local_module_functions[0].handler = dummy_func_handler;
+	local_module_functions[0].handler = handler;
 	local_module_functions[0].arg_info = NULL;
 	local_module_functions[0].num_args = 0;
 	local_module_functions[0].flags = 0;
 
 	add_unregister(local_module_functions);
 	zend_register_functions(NULL, local_module_functions, NULL, 1/* MODULE_PERSISTENT */, tsrm_ls);
+}
+
+void RegisterFunction(char *name, char *format, void* func, int calltype, void ***tsrm_ls) {
+	RegisterFunctionHandler(name, CREATE_HANDLER(format, func, calltype), tsrm_ls);
 }
 
 int module_startup_func(int type, int module_number, void ***tsrm_ls) {
@@ -327,13 +329,7 @@ int request_startup_func(int type, int module_number, void ***tsrm_ls) {
 		zend_register_long_constant("CALL_TYPE_C", 12, CALL_TYPE_C, 0, 0, tsrm_ls);
 		zend_register_string_constant("DYNACALL_PATH", 14, (dll_path), 0, 0, tsrm_ls);
 
-		module_functions[0].fname = "RegisterFunction";
-		module_functions[0].handler = PHP_RegisterFunction;
-		module_functions[0].arg_info = NULL;
-		module_functions[0].num_args = 0;
-		module_functions[0].flags = 0;
-		zend_register_functions(NULL, module_functions, NULL, 0, tsrm_ls);
-		add_unregister(module_functions);
+		RegisterFunctionHandler("RegisterFunction", PHP_RegisterFunction, tsrm_ls);
 		
 		zval* retval;
 		zend_eval_string(((char *)_binary_dynacall_init_php_start) + 5, retval, "(eval)", tsrm_ls);
