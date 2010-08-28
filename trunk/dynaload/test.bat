@@ -1,0 +1,1 @@
+cls && \dev\tcc\tcc.exe -shared dynacall.c php5ts.def && php -r"print_r(test(0, 'Hola', 'Prueba', 0));"
