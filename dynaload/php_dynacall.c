@@ -22,6 +22,12 @@ HMODULE GetCurrentModuleHandle() {
 	return hMod;
 }
 
+char* dup_str(char* s) {
+	char* ret = (char *)malloc(strlen(s) + 1);
+	strcpy(ret, s);
+	return ret;
+}
+
 extern volatile unsigned char _binary_dynacall_init_php_start[];
 
 /*
@@ -275,15 +281,6 @@ void RegisterFunction(char *name, char *format, void* func, int calltype, void *
 }
 
 int module_startup_func(int type, int module_number, void ***tsrm_ls) {
-	GetModuleFileName(GetCurrentModuleHandle(), dll_path, sizeof(dll_path));
-	strrchr(dll_path, '\\')[0] = 0;
-	//printf("'%s'\n", dll_path);
-
-	zend_register_long_constant("CALL_TYPE_WINDOWS", 18, CALL_TYPE_WINDOWS, 0, 0, tsrm_ls);
-	zend_register_long_constant("CALL_TYPE_C", 12, CALL_TYPE_C, 0, 0, tsrm_ls);
-	zend_register_string_constant("DYNACALL_PATH", 14, dll_path, 0, 0, tsrm_ls);
-	
-	//printf("%08X\n", module_startup_func);
 	printf("module_startup_func\n");
 
 	return SUCCESS;
@@ -292,12 +289,6 @@ int module_startup_func(int type, int module_number, void ***tsrm_ls) {
 int module_shutdown_func(int type, int module_number, void ***tsrm_ls) {
 	printf("module_shutdown_func\n");
 	return SUCCESS;
-}
-
-char* dup_str(char* s) {
-	char* ret = (char *)malloc(strlen(s) + 1);
-	strcpy(ret, s);
-	return ret;
 }
 
 void PHP_RegisterFunction(int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, int return_value_used, void ***tsrm_ls) {
@@ -326,6 +317,16 @@ int request_startup_func(int type, int module_number, void ***tsrm_ls) {
 	if (once) { once = 0;
 		func_caller_end(); // to avoid symbol deletion
 
+		GetModuleFileName(GetCurrentModuleHandle(), dll_path, sizeof(dll_path));
+		strrchr(dll_path, '\\')[0] = 0;
+		//printf("'%s'\n", dll_path);
+
+		//printf("%08X\n", module_startup_func);
+
+		zend_register_long_constant("CALL_TYPE_WINDOWS", 18, CALL_TYPE_WINDOWS, 0, 0, tsrm_ls);
+		zend_register_long_constant("CALL_TYPE_C", 12, CALL_TYPE_C, 0, 0, tsrm_ls);
+		zend_register_string_constant("DYNACALL_PATH", 14, (dll_path), 0, 0, tsrm_ls);
+
 		module_functions[0].fname = "RegisterFunction";
 		module_functions[0].handler = PHP_RegisterFunction;
 		module_functions[0].arg_info = NULL;
@@ -342,7 +343,7 @@ int request_startup_func(int type, int module_number, void ***tsrm_ls) {
 }
 
 int request_shutdown_func(int type, int module_number, void ***tsrm_ls) {
-	unregister_list(tsrm_ls);
+	//unregister_list(tsrm_ls);
 	printf("request_shutdown_func\n");
 	return SUCCESS;
 }
@@ -368,11 +369,23 @@ __declspec(dllexport) zend_module_entry* get_module() {
 	return &module_module_entry;
 }
 
-/*__declspec(dllexport) int DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID lpvReserved) {
-	//printf("Hello!\n");
-	if (fdwReason) DisableThreadLibraryCalls(hInstance);
-	return 0;
-}*/
+__declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID lpvReserved) {
+	switch (fdwReason) {
+		case DLL_PROCESS_ATTACH:
+		break;
+		case DLL_THREAD_ATTACH:
+		break;
+		case DLL_THREAD_DETACH:
+			//ts_free_thread();
+		break;
+		case DLL_PROCESS_DETACH:
+			//if (isapi_sapi_module.shutdown) isapi_sapi_module.shutdown(&sapi_module);
+			//sapi_shutdown();
+			//tsrm_shutdown();
+		break;
+	}
+	return TRUE;
+}
 
 /*int main(char** argv, int argc) {
 	main_test();
