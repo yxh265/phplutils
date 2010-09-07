@@ -116,4 +116,5 @@ class Segments implements Countable, ArrayAccess {
 	}
 }
 
-//Segments::__unittest();
+print_r($argv)
+Segments::__unittest();
