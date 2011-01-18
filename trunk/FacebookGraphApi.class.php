@@ -1,14 +1,11 @@
 <?php
 
 class FacebookGraphApi {
-	protected $access_token = NULL;
-	protected $limit, $offset;
-	protected $until, $since;
-	protected $q, $type;
+	protected $params = array();
 
 	// http://developers.facebook.com/docs/authentication/
 	protected function __construct($access_token = NULL) {
-		$this->access_token = $access_token;
+		$this->params['access_token'] = $access_token;
 	}
 	
 	static public function fromAccessToken($access_token) {
@@ -31,6 +28,13 @@ class FacebookGraphApi {
 
 	/**
 	 * User will be redirected to redirect_uri + a "code" parameter with the access_token.
+	 * 
+	 * @param  $client_id     Application ID
+	 * @param  $redirect_uri  URL to be redirected after the user accepted or declined the authorization request.
+	 * @param  $scope         A list of permissions separated by comma.
+	 * @param  $display       Format of the page. One of: ('page', 'popup', 'wap', 'touch')
+	 *
+	 * @see http://developers.facebook.com/docs/authentication/permissions
 	 */
 	static public function oauth_authorize_url($client_id, $redirect_uri, $scope = NULL, $display = NULL) {
 		$info = array(
@@ -55,49 +59,53 @@ class FacebookGraphApi {
 		throw(new Exception("To implement"));
 	}
 
+	protected function _clone_set($params) {
+		$that = clone $this;
+		foreach ($params as $k => $v) $that->params[$k] = $v;
+		return $that;
+	}
+	
+	public function limit_offset($limit = NULL, $offset = NULL) {
+		return $this->_clone_set(array(
+			'limit' => $limit,
+			'offset' => $offset,
+		));
+	}
+	
+	public function until_since($until = NULL, $since = NULL) {
+		return $this->_clone_set(array(
+			'until' => $until,
+			'since' => $since,
+		));
+	}
+	
+	public function type($type = NULL) {
+		return $this->_clone_set(array('type' => $type));
+	}
+	
+	public function fields($fields = NULL) {
+		return $this->_clone_set(array('fields' => $fields));
+	}
+	
+	public function query($q = NULL) {
+		return $this->_clone_set(array('q' => $q));
+	}
+	
+	protected function build_query($extra_params = array(), $add_question_mark = true) {
+		$r = http_build_query($this->params + $extra_params);
+		if ($add_question_mark) $r = ('?' . $r);
+		return $r;
+	}
+
 	/**
-	 *
+	 * @param  $id               ID type
+	 * @param  $connection_type  Type of the connection of NULL to obtain the object itself
 	 */
 	public function request($id, $connection_type = NULL) {
 		$result = JSON::decode(file_get_contents($this->request_url($id, $connection_type)), true);
 		return $result;
 	}
-	
-	public function limit_offset($limit = NULL, $offset = NULL) {
-		$that = clone $this;
-		$that->limit = $limit;
-		$that->offset = $offset;
-		return $that;
-	}
-	
-	public function until_since($until = NULL, $since = NULL) {
-		$that = clone $this;
-		$that->until = $until;
-		$that->since = $since;
-		return $that;
-	}
-	
-	public function type($type = NULL) {
-		$that = clone $this;
-		$that->type = $type;
-		return $that;
-	}
-	
-	public function query($q = NULL) {
-		$that = clone $this;
-		$that->q = $q;
-		return $that;
-	}
-	
-	protected function build_query($array = array(), $add_question_mark = true) {
-		foreach (array('q', 'type', 'limit', 'offset', 'until', 'since', 'access_token') as $param) {
-			if ($this->$param !== NULL) $array[$param] = $this->$param;
-		}
-		$r = http_build_query($array);
-		if ($add_question_mark) $r = ('?' . $r);
-		return $r;
-	}
-	
+
 	public function request_url($id, $connection_type = NULL) {
 		$path = '';
 		$path .= urlencode($id);
@@ -106,7 +114,7 @@ class FacebookGraphApi {
 		return 'https://graph.facebook.com/' . $path;
 	}
 	
-	public function search($q, $type) {
+	public function request_search($q, $type) {
 		return $this->query($q)->type($type)->request('search');
 	}
 }
