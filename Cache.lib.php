@@ -39,7 +39,13 @@ class FileCache extends NullCache {
 	protected $cache_folder;
 
 	public function __construct($path = NULL) {
-		if ($path === NULL) $path = sys_get_temp_dir() . '/php_file_cache';
+		if ($path === NULL) {
+			if (is_dir('/dev/shm/')) {
+				$path = '/dev/shm/';
+			} else {
+				$path = sys_get_temp_dir() . '/php_file_cache';
+			}
+		}
 		$this->cache_folder = $path;
 		if (!is_dir($this->cache_folder)) mkdir($this->cache_folder, 0777);
 	}
