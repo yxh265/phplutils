@@ -24,5 +24,6 @@ SET INCLUDES=%INCLUDES% /I "%PHP_PATH%\main"
 SET LIBS=
 SET LIBS=%LIBS% "%PHP_PATH%\x64\Release_TS\php5ts.lib"
 
+DEL "%OUTPUT_DLL%" 2> NUL
 cl /nologo %CONSTANTS% %INCLUDES% php_ste.c /link %LIBS% /DLL /out:"%OUTPUT_DLL%"
 

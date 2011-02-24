@@ -48,8 +48,43 @@ static PHP_MINFO_FUNCTION(phpste)
 	php_info_print_table_end();
 }
 
+/*
+// Grabbed: function twig_ensure_traversable($seq)
+function phpste_iterator($seq)
+{
+    if (is_array($seq) || (is_object($seq) && $seq instanceof Traversable)) {
+        return $seq;
+    } else {
+        return array();
+    }
+}
+*/
+
 static PHP_FUNCTION(phpste_iterator) {
-	return;
+	zval *v;
+	
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &v) == FAILURE) goto return_empty_array;
+
+	if (Z_TYPE_P(v) == IS_ARRAY) {
+		goto return_direct;
+	}
+	
+	if (Z_TYPE_P(v) == IS_OBJECT) {
+		zend_class_entry **ce;
+		if (zend_lookup_class_ex("Traversable", 11, NULL, 0, &ce TSRMLS_CC) == FAILURE) goto return_empty_array;
+
+		if (instanceof_function(Z_OBJCE_P(v), *ce TSRMLS_CC)) {
+			goto return_direct;
+		}
+	}
+
+return_empty_array:
+	array_init(v);
+	//RETURN_NULL();
+
+return_direct:
+	RETURN_ZVAL(v, 1, 0);
+	//RETURN_NULL();
 }
 
 
