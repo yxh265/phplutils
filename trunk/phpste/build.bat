@@ -1,0 +1,28 @@
+@echo off
+REM http://www.talkphp.com/vbarticles.php?do=article&articleid=49&title=creating-custom-php-extensions
+REM /FORCE:MULTIPLE
+
+SET OUTPUT_DLL=ext\php_ste.dll
+
+set PHP_PATH=%CD%\..\..
+set PHP_PATH=c:\dev\php54-src
+
+SET CONSTANTS=
+SET CONSTANTS=%CONSTANTS% /D WIN32
+SET CONSTANTS=%CONSTANTS% /D PHP_WIN32
+SET CONSTANTS=%CONSTANTS% /D ZEND_WIN32
+SET CONSTANTS=%CONSTANTS% /D ZTS=1
+SET CONSTANTS=%CONSTANTS% /D ZEND_DEBUG=0
+
+SET INCLUDES=
+SET INCLUDES=%INCLUDES% /I "%PHP_PATH%"
+SET INCLUDES=%INCLUDES% /I "%PHP_PATH%\TSRM"
+SET INCLUDES=%INCLUDES% /I "%PHP_PATH%\Zend"
+SET INCLUDES=%INCLUDES% /I "%PHP_PATH%\regex"
+SET INCLUDES=%INCLUDES% /I "%PHP_PATH%\main"
+
+SET LIBS=
+SET LIBS=%LIBS% "%PHP_PATH%\x64\Release_TS\php5ts.lib"
+
+cl /nologo %CONSTANTS% %INCLUDES% php_ste.c /link %LIBS% /DLL /out:"%OUTPUT_DLL%"
+
