@@ -40,11 +40,7 @@ class FileCache extends NullCache {
 
 	public function __construct($path = NULL) {
 		if ($path === NULL) {
-			if (is_dir('/dev/shm/')) {
-				$path = '/dev/shm/';
-			} else {
-				$path = sys_get_temp_dir() . '/php_file_cache';
-			}
+			$path = sys_get_temp_dir() . '/php_file_cache';
 		}
 		$this->cache_folder = $path;
 		if (!is_dir($this->cache_folder)) mkdir($this->cache_folder, 0777);
@@ -73,8 +69,19 @@ class FileCache extends NullCache {
 	}
 }
 
+class SharedMemoryCache extends FileCache {
+	public function __construct($info = NULL) {
+		$this->cache_folder = '/dev/shm';
+	}
+
+	static public function available() {
+		return is_dir('/dev/shm');
+		//return (PHP_OS != 'WINNT') && (is_dir(''));
+	}
+}
+
 class CacheFactory {
-	static $drivers = array('apc' => 'ApcCache', 'file' => 'FileCache', 'null' => 'NullCache');
+	static $drivers = array('apc' => 'ApcCache', 'shm' => 'SharedMemoryCache', 'file' => 'FileCache', 'null' => 'NullCache');
 
 	static public function getInstance($driver_name = 'autodetect', $info = NULL) {
 		if ($driver_name == 'autodetect') {
