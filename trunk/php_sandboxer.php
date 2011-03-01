@@ -3,6 +3,41 @@
 class SandboxerException extends Exception {
 }
 
+class SandboxerTokenizer {
+	public $tokens;
+	public $n;
+
+	public function __construct($v) {
+		$this->tokens = array_map(function($v) { return is_array($v) ? $v[1] : $v; }, token_get_all('<' . '?php ' . $v));
+		$this->n = 0;
+	}
+
+	public function current() {
+		return $this->tokens[$this->n];
+	}
+
+	public function prev() {
+		$this->moveDirection(-1);
+		return $this->current();
+	}
+
+	public function next() {
+		$this->moveDirection(+1);
+		return $this->current();
+	}
+	
+	public function moveDirection($n) {
+		if ($n < 0) $sign = -1; else if ($n > 0) $sign = +1; else return;
+		while (true) {
+			$this->n += $sign;
+			if (!isset($this->tokens[$n])) break;
+			if (!preg_match('@^\\s+$@', $this->tokens[$n])) {
+				return;
+			}
+		}
+	}
+}
+
 class Sandboxer {
 	static public $last_instance;
 	public $file_name_stack = array();
