@@ -15,46 +15,71 @@ class Sandboxer {
 	public function __construct() {
 		static::$last_instance = $this;
 	}
+	
+	public function getCurrentFileName() {
+		return $this->file_name_stack[count($this->file_name_stack) - 1];
+	}
 
 	public function call_replacer($v) {
-		$class = get_called_class();
+		$className = get_called_class();
 		
-		// @TODO: Use tokenizer.
+		$tokens = array_map(function($v) { return is_array($v) ? $v[1] : $v; }, token_get_all('<?php ' . $v));
 		
-		$ret = preg_replace_callback('@([\\$\\w]+)\\s*\\(@', function($fname) use ($class) {
-			$escaped_fname = $fname = $fname[1];
+		$l = count($tokens);
+		$code = true;
+		for ($n = 0; $n < $l; $n++) {
+			$token = $tokens[$n];
 
-			switch ($fname) {
-				// Keyword
-				case 'foreach':
-				case 'while':
-				case 'for':
-				case 'if':
-					return $fname . '(';
-				break;
-				// Not a keyword
-				default:
-					//echo "'{$fname}'\n\n";
+			if ($token == '?>') {
+				$code = false;
+				continue;
+			}
+			
+			//echo "'$token'\n";
 
-					// Not a variable
-					if (substr($fname, 0, 1) != '$') {
-						$escaped_fname = var_export($fname, true);
-					}
-
-					// Capture local context before eval.
-					if ($fname == 'eval') {
-						$escaped_fname = '((Sandboxer::$last_instance->local_context = get_defined_vars()) === NULL) ? NULL : ' . $escaped_fname ;
+			if ($token == '<?php ') {
+				$code = true;
+				continue;
+			}
+			//var_dump($code);
+			if ($code) {
+				if (preg_match('@^\\$?[a-z_]\\w*$@i', $token)) {
+					// Function call.
+					if ($tokens[$n + 1] == '(') {
+						switch ($token) {
+							case 'require': case 'require_once': case 'include': case 'include_once':
+								die("Unhandled require, include...");
+							break;
+							case 'foreach':
+							case 'while':
+							case 'for':
+							case 'if':
+							case 'isset':
+							case 'return':
+							break;
+							default:
+								$escaped_token = $token;
+								if (substr($token, 0, 1) != '$') {
+									$escaped_token = var_export($token, true);
+								}
+								if ($token == 'eval') {
+									$escaped_token = '((Sandboxer::$last_instance->local_context = get_defined_vars()) === NULL) ? NULL : ' . $escaped_token;
+								}
+								$tokens[$n] = $className . '::$last_instance->call_hook(' . $escaped_token . ',';
+								$tokens[$n + 1] = '';
+								//echo $token . "\n";
+							break;
+						}
 					}
 					
-					return $class . '::$last_instance->call_hook(' . $escaped_fname . ',';
-					//return 'call_hook(' . $escaped_fname . ',';
-				break;
+					if ($token == '__FILE__') {
+						$tokens[$n] = var_export($this->getCurrentFileName(), true);
+					}
+				}
 			}
-		}, $v);
+		}
 		
-		$ret = str_replace('__FILE__', var_export($this->file_name_stack[count($this->file_name_stack) - 1], 1), $ret);
-		
-		return $ret;
+		return implode('', array_slice($tokens, 1));
 	}
 	
 	public function call_hook($func) {
@@ -84,7 +109,9 @@ class Sandboxer {
 	public function __hook_eval($unprocesed_code) {
 		$this->code = $this->call_replacer($unprocesed_code);
 		unset($unprocesed_code);
-		echo $this->code . "\n\n";
+		echo "------------------------------------------------\n";
+		echo $this->code . "\n";
+		echo "------------------------------------------------\n";
 		extract(Sandboxer::$last_instance->local_context);
 		//print_r($this->local_context);
 		$this->__RETVAL = eval($this->code);
@@ -127,4 +154,8 @@ $sandboxer->register('fopen', function($name, $type) {
 });
 $sandboxer->register('fread');
 $sandboxer->register('strtr');
+$sandboxer->register('preg_match');
+$sandboxer->register('die', function($v) {
+	die($v);
+});
 $sandboxer->execute_file('c:/projects/handler.php');
