@@ -1,9 +1,7 @@
 <?php
 
-/*function call_hook() {
-	$args = func_get_args();
-	return call_user_func_array(array(Sandboxer::$last_instance, 'call_hook'), $args);
-}*/
+class SandboxerException extends Exception {
+}
 
 class Sandboxer {
 	static public $last_instance;
@@ -23,32 +21,40 @@ class Sandboxer {
 	public function call_replacer($v) {
 		$className = get_called_class();
 		
-		$tokens = array_map(function($v) { return is_array($v) ? $v[1] : $v; }, token_get_all('<?php ' . $v));
+		$tokens = array_map(function($v) { return is_array($v) ? $v[1] : $v; }, token_get_all('<' . '?php ' . $v));
 		
 		$l = count($tokens);
 		$code = true;
+		$code_state = $code_state_init = array(
+			'function' => false,
+		);
 		for ($n = 0; $n < $l; $n++) {
 			$token = $tokens[$n];
 
-			if ($token == '?>') {
+			if ($token == '?' . '>') {
 				$code = false;
 				continue;
 			}
 			
 			//echo "'$token'\n";
 
-			if ($token == '<?php ') {
+			if ($token == '<' . '?php ') {
 				$code = true;
+				$code_state = $code_state_init;
 				continue;
 			}
 			//var_dump($code);
 			if ($code) {
+				// Space
+				if (preg_match('@^\\s+$@', $token)) {
+					continue;
+				}
 				if (preg_match('@^\\$?[a-z_]\\w*$@i', $token)) {
 					// Function call.
 					if ($tokens[$n + 1] == '(') {
 						switch ($token) {
 							case 'require': case 'require_once': case 'include': case 'include_once':
-								die("Unhandled require, include...");
+								throw(new SandboxerException("Unhandled require, include..."));
 							break;
 							case 'foreach':
 							case 'while':
@@ -58,6 +64,14 @@ class Sandboxer {
 							case 'return':
 							break;
 							default:
+								if ($code_state['function']) {
+									break;
+								}
+								
+								if (($tokens[$n - 1] == '::') || ($tokens[$n - 1] == '->')) {
+									throw(new SandboxerException("Not supported sandbox method calling"));
+								}
+							
 								$escaped_token = $token;
 								if (substr($token, 0, 1) != '$') {
 									$escaped_token = var_export($token, true);
@@ -76,6 +90,13 @@ class Sandboxer {
 						$tokens[$n] = var_export($this->getCurrentFileName(), true);
 					}
 				}
+
+				if ($token == 'function') {
+					$code_state['function'] = true;
+				} else {
+					$code_state['function'] = false;
+				}
+
 			}
 		}
 		
@@ -103,7 +124,7 @@ class Sandboxer {
 			return call_user_func_array(array($this, $method_name), $args);
 		}
 		
-		die("Unexpected function '{$func}'");
+		throw(new SandboxerException("Unexpected function '{$func}'"));
 	}
 
 	public function __hook_eval($unprocesed_code) {
@@ -124,7 +145,7 @@ class Sandboxer {
 		array_push($this->file_name_stack, $file_name);
 		{
 			$code = file_get_contents($file_name);
-			$this->__hook_eval('?>' . $code);
+			$this->__hook_eval('?' . '>' . $code);
 		}
 		array_pop($this->file_name_stack);
 	}
@@ -144,12 +165,13 @@ class Sandboxer {
 	}
 }
 
+$_SERVER['HTTP_HOST'] = $argv[1];
 $sandboxer = new Sandboxer();
 $sandboxer->registerErrorHandlers();
 $sandboxer->register('base64_decode');
 $sandboxer->register('urldecode');
 $sandboxer->register('fopen', function($name, $type) {
-	if ($type != 'rb') die("Unexpected fopen type");
+	if ($type != 'rb') throw(new SandboxerException("Unexpected fopen type"));
 	return fopen($name, 'rb');
 });
 $sandboxer->register('fread');
@@ -160,5 +182,9 @@ $sandboxer->register('str_replace');
 $sandboxer->register('die', function($v) {
 	die($v);
 });
-$sandboxer->execute_file('c:/projects/handler.php');
-file_put_contents('handler_decrypted.php', '<?php ' . $sandboxer->unprocessed_code);
+try {
+	$sandboxer->execute_file('c:/projects/handler.php');
+} catch (SandboxerException $e) {
+	printf("Exception: %s\n", $e->getMessage());
+}
+file_put_contents('handler_decrypted.php', '<' . '?php ' . $sandboxer->unprocessed_code);
