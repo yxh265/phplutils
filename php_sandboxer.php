@@ -18,6 +18,9 @@ class Sandboxer {
 
 	public function call_replacer($v) {
 		$class = get_called_class();
+		
+		// @TODO: Use tokenizer.
+		
 		$ret = preg_replace_callback('@([\\$\\w]+)\\s*\\(@', function($fname) use ($class) {
 			$escaped_fname = $fname = $fname[1];
 
