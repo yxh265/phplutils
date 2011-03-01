@@ -18,11 +18,19 @@ function function_proxy_handle($v) {
 function function_proxy($func) {
 	static $enable_funcs = array(
 		'base64_decode',
+		'fopen',
+		'fread'
 	);
-	
-	echo "$func\n";
-	
+
 	$args = array_slice(func_get_args(), 1);
+	
+	echo "{$func}(";
+	foreach ($args as $k => $arg) {
+		if ($k > 0) echo ", ";
+		echo var_export($arg, true);
+	}
+	echo ")\n";
+	echo "\n";
 	
 	if (in_array($func, $enable_funcs)) {
 		return call_user_func_array($func, $args);
@@ -30,8 +38,11 @@ function function_proxy($func) {
 	
 	if ($func == 'eval') {
 		$code = function_proxy_handle($args[0]);
-		echo $code;
-		return eval($code);
+		echo $code . "\n\n";
+		extract($GLOBALS['LOCAL_CONTEXT']);
+		$__RETVAL = eval($code);
+		$GLOBALS['LOCAL_CONTEXT'] = get_defined_vars();
+		return $__RETVAL;
 	}
 	
 	die("Unexpected function '{$func}'");
