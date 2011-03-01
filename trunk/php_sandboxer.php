@@ -18,21 +18,35 @@ class Sandboxer {
 
 	public function call_replacer($v) {
 		$class = get_called_class();
-		$ret = preg_replace_callback('@([\\$\\w]+\\s*)\\(@', function($fname) use ($class) {
+		$ret = preg_replace_callback('@([\\$\\w]+)\\s*\\(@', function($fname) use ($class) {
 			$escaped_fname = $fname = $fname[1];
-			
-			// Not a variable
-			if (substr($fname, 0, 1) != '$') {
-				$escaped_fname = var_export($fname, true);
-			}
 
-			// Capture local context before eval.
-			if ($fname == 'eval') {
-				$escaped_fname = '((Sandboxer::$last_instance->local_context = get_defined_vars()) === NULL) ? NULL : ' . $escaped_fname ;
+			switch ($fname) {
+				// Keyword
+				case 'foreach':
+				case 'while':
+				case 'for':
+				case 'if':
+					return $fname . '(';
+				break;
+				// Not a keyword
+				default:
+					//echo "'{$fname}'\n\n";
+
+					// Not a variable
+					if (substr($fname, 0, 1) != '$') {
+						$escaped_fname = var_export($fname, true);
+					}
+
+					// Capture local context before eval.
+					if ($fname == 'eval') {
+						$escaped_fname = '((Sandboxer::$last_instance->local_context = get_defined_vars()) === NULL) ? NULL : ' . $escaped_fname ;
+					}
+					
+					return $class . '::$last_instance->call_hook(' . $escaped_fname . ',';
+					//return 'call_hook(' . $escaped_fname . ',';
+				break;
 			}
-			
-			return $class . '::$last_instance->call_hook(' . $escaped_fname . ',';
-			//return 'call_hook(' . $escaped_fname . ',';
 		}, $v);
 		
 		$ret = str_replace('__FILE__', var_export($this->file_name_stack[count($this->file_name_stack) - 1], 1), $ret);
