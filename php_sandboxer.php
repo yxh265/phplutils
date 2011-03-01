@@ -9,7 +9,7 @@ class Sandboxer {
 	static public $last_instance;
 	public $file_name_stack = array();
 	public $local_context = array();
-	private $code, $__RETVAL;
+	public $code, $unprocessed_code, $__RETVAL;
 	public $functions = array();
 	
 	public function __construct() {
@@ -107,7 +107,7 @@ class Sandboxer {
 	}
 
 	public function __hook_eval($unprocesed_code) {
-		$this->code = $this->call_replacer($unprocesed_code);
+		$this->code = $this->call_replacer($this->unprocessed_code = $unprocesed_code);
 		unset($unprocesed_code);
 		echo "------------------------------------------------\n";
 		echo $this->code . "\n";
@@ -153,9 +153,12 @@ $sandboxer->register('fopen', function($name, $type) {
 	return fopen($name, 'rb');
 });
 $sandboxer->register('fread');
+$sandboxer->register('fclose');
 $sandboxer->register('strtr');
 $sandboxer->register('preg_match');
+$sandboxer->register('str_replace');
 $sandboxer->register('die', function($v) {
 	die($v);
 });
 $sandboxer->execute_file('c:/projects/handler.php');
+file_put_contents('handler_decrypted.php', '<?php ' . $sandboxer->unprocessed_code);
