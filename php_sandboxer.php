@@ -3,6 +3,9 @@
 class SandboxerException extends Exception {
 }
 
+class ParseSandboxerException extends SandboxerException {
+}
+
 class SandboxerTokenizer {
 	public $tokens;
 	public $n;
@@ -42,7 +45,7 @@ class Sandboxer {
 	static public $last_instance;
 	public $file_name_stack = array();
 	public $local_context = array();
-	public $code, $unprocessed_code, $__RETVAL;
+	public $code, $unprocessed_code, $__RETVAL, $last_error;
 	public $functions = array();
 
 	public function __construct() {
@@ -89,7 +92,7 @@ class Sandboxer {
 					if ($tokens[$n + 1] == '(') {
 						switch ($token) {
 							case 'require': case 'require_once': case 'include': case 'include_once':
-								throw(new SandboxerException("Unhandled require, include..."));
+								throw(new ParseSandboxerException("Unhandled require, include..."));
 							break;
 							case 'foreach':
 							case 'while':
@@ -104,7 +107,7 @@ class Sandboxer {
 								}
 
 								if (($tokens[$n - 1] == '::') || ($tokens[$n - 1] == '->')) {
-									throw(new SandboxerException("Not supported sandbox method calling"));
+									throw(new ParseSandboxerException("Not supported sandbox method calling"));
 								}
 
 								$escaped_token = $token;
@@ -171,6 +174,11 @@ class Sandboxer {
 		extract(Sandboxer::$last_instance->local_context);
 		//print_r($this->local_context);
 		$this->__RETVAL = eval($this->code);
+		$this->last_error = (object)error_get_last();
+		if (isset($this->last_error->type) && ($this->last_error->type == 4)) {
+			throw(new ParseSandboxerException("PARSE Error : " . print_r($this->last_error, true)));
+		}
+		//print_r(error_get_last());
 		//print_r(get_defined_vars());
 		Sandboxer::$last_instance->local_context = get_defined_vars();
 		return $this->__RETVAL;
@@ -188,6 +196,10 @@ class Sandboxer {
 			$this->__hook_eval('?' . '>' . $code);
 		}
 		array_pop($this->file_name_stack);
+	}
+
+	public function execute_code($code) {
+		return $this->__hook_eval($code);
 	}
 
 	public function registerErrorHandlers() {
@@ -254,4 +266,13 @@ class Sandboxer {
 	}
 }
 
-// file_put_contents('handler_decrypted.php', Sandboxer::generic_decrypter('c:/projects/handler.php', $argv[1]));
+/*
+$sandboxer = new Sandboxer();
+$sandboxer->register('max');
+$sandboxer->execute_code('echo max(1, 2);');
+*/
+
+//eval('sadfsa');
+//print_r(error_get_last());
+
+//file_put_contents('handler_decrypted.php', Sandboxer::generic_decrypter('c:/projects/handler.php', $argv[1]));
