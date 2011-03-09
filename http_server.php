@@ -6,7 +6,11 @@ class SocketClient {
 	protected $id;
 	private $_buffer = '';
 	
-	public function __construct($sock) {
+	public function __construct($sock, $port = NULL) {
+		if (is_string($sock)) {
+			$sock = socket_create($sock, AF_INET, SOCK_STREAM);
+			socket_connect($sock, $sock, $port);
+		}
 		if ($sock === NULL) throw(new Exception("Invalid socket"));
 		$this->id = self::$lastId++;
 		$this->sock = $sock;
@@ -62,7 +66,9 @@ class SocketServer {
 	protected $clientClass;
 
 	public function __construct($port, $clientClass = 'SocketClient', $backlog = 128) {
+		echo "Listening at port '" . $port . "'...";
 		$this->sock = socket_create_listen($port);
+		echo "Ok\n";
 		$this->clientClass = $clientClass;
 		if ($this->sock === NULL) throw(new Exception("Invalid server socket"));
 		socket_set_nonblock($this->sock);
@@ -141,11 +147,11 @@ class HttpSocketClient extends SocketClient {
 		// Reading post if available
 		if ($this->httpState == 1) {
 			if (strlen($this->httpData) >= $this->recvContentLength) {
-				$_SERVER['RAW_HTTP_DATA'] = substr($this->httpData, 0, $this->recvContentLength);
-				//$_SERVER['RAW_HTTP_DATA'] = urldecode($_SERVER['RAW_HTTP_DATA']);
-				parse_str($_SERVER['RAW_HTTP_DATA'], $_POST);
+				$_SERVER['HTTP_RAW_POST_DATA'] = substr($this->httpData, 0, $this->recvContentLength);
+				parse_str($_SERVER['HTTP_RAW_POST_DATA'], $_POST);
 				
-				$_REQUEST = $_POST + $_GET + $_COOKIE;
+				// variables_order = GPCS
+				$_REQUEST = $_GET + $_POST + $_COOKIE + $_SERVER;
 				
 				$this->httpData = substr($this->httpData, $this->recvContentLength);
 				$this->sendReply();
@@ -154,22 +160,24 @@ class HttpSocketClient extends SocketClient {
 		}
 	}
 	
-	public function generateContents() {
+	public function handleHttpRequest() {
+		ob_start();
+		{
+			$this->outputHttpRequest();
+		}
+		return ob_get_clean();
+	}
+	
+	public function outputHttpRequest() {
 	}
 	
 	public function sendReply() {
-		ob_start();
-		{
-			$this->generateContents();
-			//$GLOBALS['HttpSocketClient'] = $this;
-			//eval('$GLOBALS["HttpSocketClient"]->generateContents();');
-		}
-		$contents = ob_get_clean();
-		
 		echo "REQUEST: {$_SERVER['REQUEST_URI']}\n";
-		echo $contents;
+		$contents = $this->handleHttpRequest();
+		echo "  CONTENTS: {$contents}\n";
 		
 		$this->send("HTTP/1.1 200 OK\r\n");
+		$this->send("Content-Length: " . strlen($contents) . "\r\n");
 		$this->send("Content-Type: text/html\r\n");
 		$this->send("Connection: close\r\n");
 		$this->send("\r\n");
@@ -189,32 +197,41 @@ class HttpSocketClient extends SocketClient {
 		$_SERVER['HTTP_METHOD'] = $matches[1];
 		$_SERVER['HTTP_HOST'] = 'localhost';
 		$_SERVER['HTTP_PORT'] = 80;
-		$_SERVER['REQUEST_URI'] = $matches[2];
+		$info = parse_url($matches[2]);
+		$_SERVER['REQUEST_URI'] = @$info['path' ];
+		$_SERVER['HTTP_QUERY']  = @$info['query'];
+		parse_str($_SERVER['HTTP_QUERY'], $_GET);
 		foreach (array_slice($this->raw_headers, 1) as $raw_header) {
 			@list($type, $value) = explode(':', $raw_header, 2);
 			$type = strtolower(trim($type));
+			$value = trim($value);
 			switch ($type) {
 				case 'host':
-					@list($_SERVER['HTTP_HOST'], $_SERVER['HTTP_PORT']) = explode(':', $value, 2);
+					$info = parse_url($value);
+					if ($info['host']) $_SERVER['HTTP_HOST'] = $info['host'];
+					if ($info['port']) $_SERVER['HTTP_PORT'] = $info['port'];
 				break;
 				case 'content-length':
 					$this->recvContentLength = (int)$value;
 				break;
 			}
 		}
-	}	
-}
-
-class AppHttpSocketClient extends HttpSocketClient {
-	public function generateContents() {
-		echo '<pre>';
-		//phpinfo();
-		print_r($_SERVER);
-		print_r($_POST);
-		print_r($this->raw_headers);
 	}
 }
 
+class AppHttpSocketClient extends HttpSocketClient {
+	public $sessions = array();
+
+	public function outputHttpRequest() {
+		echo '<pre>';
+		//phpinfo();
+		print_r($_SERVER);
+		print_r($_GET);
+		print_r($_POST);
+		//print_r($_REQUEST);
+		print_r($this->raw_headers);
+	}
+}
 
 $socketServer = new SocketServer(80, 'AppHttpSocketClient');
 $socketServer->loop();
