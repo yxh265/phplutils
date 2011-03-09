@@ -111,32 +111,63 @@ class SocketServer {
 }
 
 class HttpSocketClient extends SocketClient {
+	public $httpState = 0;
 	public $raw_headers;
+	public $recvContentLength = 0;
 	public $httpData = '';
+	
+	public function onInit() {
+		$_SERVER = array();
+		$_GET = array();
+		$_POST = array();
+		$_REQUEST = array();
+		$_COOKIE = array();
+	}
 
 	public function onData($data) {
 		echo "{$data}\n";
 		$this->httpData .= $data;
-		if (strpos($this->httpData, "\r\n\r\n") !== false) {
-			list($raw_headers, $this->httpData) = explode("\r\n\r\n", $this->httpData);
-			$this->onHeadersSended($raw_headers);
-			$this->httpData = '';
+
+		// Reading headers.
+		if ($this->httpState == 0) {
+			if (strpos($this->httpData, "\r\n\r\n") !== false) {
+				list($raw_headers, $this->httpData) = explode("\r\n\r\n", $this->httpData);
+				$this->recvContentLength = 0;
+				$this->onHeadersSended($raw_headers);
+				$this->httpState = 1;
+			}
+		}
+
+		// Reading post if available
+		if ($this->httpState == 1) {
+			if (strlen($this->httpData) >= $this->recvContentLength) {
+				$_SERVER['RAW_HTTP_DATA'] = substr($this->httpData, 0, $this->recvContentLength);
+				//$_SERVER['RAW_HTTP_DATA'] = urldecode($_SERVER['RAW_HTTP_DATA']);
+				parse_str($_SERVER['RAW_HTTP_DATA'], $_POST);
+				
+				$_REQUEST = $_POST + $_GET + $_COOKIE;
+				
+				$this->httpData = substr($this->httpData, $this->recvContentLength);
+				$this->sendReply();
+				$this->httpState = 0;
+			}
 		}
 	}
 	
 	public function generateContents() {
 	}
 	
-	public function onHeadersSended($data) {
-		$this->raw_headers = explode("\r\n", $data);
+	public function sendReply() {
 		ob_start();
 		{
-			$this->processHeaders();
-			eval('$GLOBALS["HttpSocketClient"]->generateContents();');
+			$this->generateContents();
+			//$GLOBALS['HttpSocketClient'] = $this;
+			//eval('$GLOBALS["HttpSocketClient"]->generateContents();');
 		}
 		$contents = ob_get_clean();
 		
 		echo "REQUEST: {$_SERVER['REQUEST_URI']}\n";
+		echo $contents;
 		
 		$this->send("HTTP/1.1 200 OK\r\n");
 		$this->send("Content-Type: text/html\r\n");
@@ -144,6 +175,11 @@ class HttpSocketClient extends SocketClient {
 		$this->send("\r\n");
 		$this->send($contents);
 		$this->close();
+	}
+	
+	public function onHeadersSended($data) {
+		$this->raw_headers = explode("\r\n", $data);
+		$this->processHeaders();
 	}
 	
 	public function processHeaders() {
@@ -161,9 +197,11 @@ class HttpSocketClient extends SocketClient {
 				case 'host':
 					@list($_SERVER['HTTP_HOST'], $_SERVER['HTTP_PORT']) = explode(':', $value, 2);
 				break;
+				case 'content-length':
+					$this->recvContentLength = (int)$value;
+				break;
 			}
 		}
-		$GLOBALS['HttpSocketClient'] = $this;
 	}	
 }
 
@@ -172,6 +210,7 @@ class AppHttpSocketClient extends HttpSocketClient {
 		echo '<pre>';
 		//phpinfo();
 		print_r($_SERVER);
+		print_r($_POST);
 		print_r($this->raw_headers);
 	}
 }
