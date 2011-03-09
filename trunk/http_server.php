@@ -1,11 +1,14 @@
 <?php
 
 class SocketClient {
+	static protected $lastId = 0;
 	protected $sock;
+	protected $id;
 	private $_buffer = '';
 	
 	public function __construct($sock) {
 		if ($sock === NULL) throw(new Exception("Invalid socket"));
+		$this->id = self::$lastId++;
 		$this->sock = $sock;
 		$this->opened = true;
 		socket_set_nonblock($this->sock);
@@ -27,8 +30,12 @@ class SocketClient {
 
 	public function tick() {
 		do {
-			$readed = socket_read($this->sock, 1024, PHP_BINARY_READ);
-			//echo "\n\n[[[[[[" . socket_last_error($this->sock) . "]]]]]]]]]]]]\n";
+			$readed = @socket_read($this->sock, 1024, PHP_BINARY_READ);
+			if (socket_last_error($this->sock) == 10054) {
+				echo "Connection interrupted\n";
+				$this->sock = NULL;
+				$readed = false;
+			}
 			if ($readed === false) {
 				break;
 			}
@@ -42,6 +49,10 @@ class SocketClient {
 	}
 	
 	public function onData($data) {
+	}
+	
+	public function __toString() {
+		return (string)$this->id;
 	}
 }
 
@@ -59,7 +70,9 @@ class SocketServer {
 	
 	public function getSocket($sock) {
 		$clientClass = $this->clientClass;
-		return new $clientClass($sock);
+		$client = new $clientClass($sock);
+		echo "Connection opened {$this->clientClass}(" . $client . ")\n";
+		return $client;
 	}
 	
 	public function tick() {
@@ -76,7 +89,13 @@ class SocketServer {
 		}
 
 		// Client prunning
-		$this->clients = array_filter($this->clients, function(SocketClient $client) { return $client->opened(); });
+		$this->clients = array_filter($this->clients, function(SocketClient $client) {
+			$opened = $client->opened();
+			if (!$opened) {
+				echo "Connection closed (" . $client . ")\n";
+			}
+			return $opened;
+		});
 
 		foreach ($this->clients as $client) {
 			$client->tick();
@@ -96,9 +115,12 @@ class HttpSocketClient extends SocketClient {
 	public $httpData = '';
 
 	public function onData($data) {
+		echo "{$data}\n";
 		$this->httpData .= $data;
-		if (substr($this->httpData, -4) == "\r\n\r\n") {
-			$this->onHeadersSended($this->httpData);
+		if (strpos($this->httpData, "\r\n\r\n") !== false) {
+			list($raw_headers, $this->httpData) = explode("\r\n\r\n", $this->httpData);
+			$this->onHeadersSended($raw_headers);
+			$this->httpData = '';
 		}
 	}
 	
@@ -114,6 +136,8 @@ class HttpSocketClient extends SocketClient {
 		}
 		$contents = ob_get_clean();
 		
+		echo "REQUEST: {$_SERVER['REQUEST_URI']}\n";
+		
 		$this->send("HTTP/1.1 200 OK\r\n");
 		$this->send("Content-Type: text/html\r\n");
 		$this->send("Connection: close\r\n");
@@ -126,13 +150,17 @@ class HttpSocketClient extends SocketClient {
 		$_SERVER = array();
 		$raw_header = $this->raw_headers[0];
 		preg_match('@^(GET|POST) (.*) HTTP/\d+\\.\\d+$@', $raw_header, $matches);
-		$_SERVER['REQUEST_URI'] = $matches[2];
 		$_SERVER['HTTP_METHOD'] = $matches[1];
+		$_SERVER['HTTP_HOST'] = 'localhost';
+		$_SERVER['HTTP_PORT'] = 80;
+		$_SERVER['REQUEST_URI'] = $matches[2];
 		foreach (array_slice($this->raw_headers, 1) as $raw_header) {
 			@list($type, $value) = explode(':', $raw_header, 2);
 			$type = strtolower(trim($type));
 			switch ($type) {
-				case 'host': $_SERVER['HTTP_HOST'] = $value; break;
+				case 'host':
+					@list($_SERVER['HTTP_HOST'], $_SERVER['HTTP_PORT']) = explode(':', $value, 2);
+				break;
 			}
 		}
 		$GLOBALS['HttpSocketClient'] = $this;
@@ -142,6 +170,7 @@ class HttpSocketClient extends SocketClient {
 class AppHttpSocketClient extends HttpSocketClient {
 	public function generateContents() {
 		echo '<pre>';
+		//phpinfo();
 		print_r($_SERVER);
 		print_r($this->raw_headers);
 	}
