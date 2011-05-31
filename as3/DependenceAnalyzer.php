@@ -533,35 +533,18 @@ class DependenceAnalyzer {
 	}
 }
 
-$dependenceAnalyzer = @unserialize(file_get_contents('graph.serialize'));
-
-if (!($dependenceAnalyzer instanceof DependenceAnalyzer)) {
-	$dependenceAnalyzer = new DependenceAnalyzer();
-	if (true) {
-		$dependenceAnalyzer->addSourceFolder('d:/OurClientV2/libs/propias_test');
-		$dependenceAnalyzer->addSourceFolder('d:/OurClientV2/libs/propias');
-		$dependenceAnalyzer->addSourceFolder('d:/OurClientV2/libs/externas');
-	} else {
-		//$dependenceAnalyzer->addSourceFolder('d:/OurClientV2/libs/externas/asunit');
-		$dependenceAnalyzer->addSourceFolder('d:/OurClientV2/libs/propias/com/our/components');
-	}
-
-	$dependenceAnalyzer->analyzeAllSourceFolders();
-	$dependenceAnalyzer->finalize();
-
-	file_put_contents('graph.serialize', serialize($dependenceAnalyzer));
-}
-
 function showHelp() {
 	printf("DependenceAnalyzer\n");
 	printf("\n");
 	printf("--level=[1,2,3,4...]\n");
 	printf("--include=fl.utils\n");
 	printf("--include=fl:3\n");
+	printf("--source=c:/my/as3/files\n");
 	exit(-1);
 }
 
 $includes = array();
+$sources = array();
 $level = null;
 
 foreach (array_slice($argv, 1) as $arg) {
@@ -574,6 +557,9 @@ foreach (array_slice($argv, 1) as $arg) {
 			break;
 			case 'include':
 				$includes[] = $value;
+			break;
+			case 'source':
+				$sources[] = $value;
 			break;
 			case 'help':
 				showHelp();
@@ -590,6 +576,20 @@ foreach (array_slice($argv, 1) as $arg) {
 
 if (($level === null) && empty($includes)) {
 	showHelp();
+}
+
+$sources_hash = md5(implode(',', $sources));
+$dependenceAnalyzer = @unserialize(file_get_contents($serialize_file = "{$sources_hash}.serialize"));
+
+if (!($dependenceAnalyzer instanceof DependenceAnalyzer)) {
+	$dependenceAnalyzer = new DependenceAnalyzer();
+	foreach ($sources as $source) {
+		$dependenceAnalyzer->addSourceFolder($source);
+	}
+	$dependenceAnalyzer->analyzeAllSourceFolders();
+	$dependenceAnalyzer->finalize();
+
+	file_put_contents($serialize_file, serialize($dependenceAnalyzer));
 }
 
 ob_start();
